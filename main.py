@@ -1,143 +1,148 @@
 import logging
 import asyncio
-import time
-import re
-import random
-import requests
 from telethon import TelegramClient, events
 
 # --- AYARLAR ---
 API_ID = 33188452
 API_HASH = 'ac4afbd122081956a173b16590c02609'
-BOT_TOKEN = '8700345149:AAECfYkuE4xzIdn4yFZzzl4r5ZqnU_bSk6Q'
+BOT_TOKEN = '8692735722:AAFJ7u253A9tzqVDNetCzfsEgfzVaOoWwmA'
 
-BOT_NAME = "VATİKAN ÜCRETSİZ SMS"
-DEVELOPER = "@primalamazsin"
+BOT_NAME = "VATİKAN YIKICI CP"
+OWNER = 8620961678
 
-client = TelegramClient('free_sms_clean', API_ID, API_HASH)
+client = TelegramClient('cp_destroyer', API_ID, API_HASH)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-active_numbers = {}
-
-def get_clean_telegram_number():
-    """Telegram'da yasaklı olmayan, az kullanılmış numaraları önceliklendir"""
-    sources = [
-        "https://receive-smss.com/",
-        "https://quackr.io/",
-        "https://tempsmss.com/",
-        "https://sms24.me/en"
-    ]
-    random.shuffle(sources)
-
-    for site in sources:
-        try:
-            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-            r = requests.get(site, timeout=15, headers=headers)
-            
-            # Tüm + ile başlayan numaraları yakala
-            phones = re.findall(r'(\+\d{11,15})', r.text)  # Minimum 11 hane
-            phones = list(set(phones))
-            
-            if phones:
-                random.shuffle(phones)
-                for phone in phones:
-                    # Temiz numara filtreleri
-                    if (phone.startswith(('+90', '+44', '+49', '+33', '+34', '+39')) and  # Türkiye + Avrupa kodları daha az ban yiyor
-                        len(phone) >= 12 and len(phone) <= 15):
-                        
-                        # Inbox URL
-                        if "receive-smss" in site:
-                            inbox_url = f"https://receive-smss.com/sms/{phone.replace('+', '')}"
-                        elif "quackr" in site:
-                            inbox_url = f"https://quackr.io/{phone.replace('+', '')}"
-                        else:
-                            inbox_url = site
-                        
-                        return phone, inbox_url
-        except Exception:
-            continue
-    return None, None
+# Aktif spam durumu
+spam_tasks = {}  # {user_id: {"target": chat, "media": [], "running": True, "delay": 0.6}}
 
 @client.on(events.NewMessage(pattern='/start'))
-async def start_handler(event):
-    text = (
-        f"🔥 **{BOT_NAME}** Hoş geldin.\n\n"
-        f"Telegram için yasaklı olmayan ve az kullanılmış temiz numaralar sağlarım.\n\n"
-        f"📌 Komutlar:\n"
-        f"`/sms` → Temiz numara al\n"
-        f"`/kod +numara` → Kodu bekle ve yakala\n\n"
-        f"💎 Daha fazla araç için:\n"
-        f"👉 [t.me/vatikanpub](https://t.me/vatikanpub)\n\n"
-        f"Developer: {DEVELOPER}"
-    )
-    await event.respond(text, link_preview=False)
-
-@client.on(events.NewMessage(pattern='/sms'))
-async def get_free_number(event):
-    if not event.is_private:
-        await event.respond("❌ Bu komut sadece özelde çalışır.")
-        return
-
-    await event.respond("📱 **Telegram'da yasaklı olmayan temiz numara aranıyor...**")
-
-    phone, inbox_url = get_clean_telegram_number()
-    if not phone:
-        await event.respond("❌ Şu anda temiz numara bulunamadı.\nBirkaç dakika sonra tekrar `/sms` dene.")
-        return
-
-    active_numbers[event.sender_id] = {"phone": phone, "inbox_url": inbox_url}
-
+async def start(event):
     await event.respond(
-        f"✅ **Temiz Numara Hazır**\n"
-        f"Numara: `{phone}`\n\n"
-        f"Bu numara Telegram'da az kullanılmış ve yasaklı görünmüyor.\n\n"
-        f"Kod geldiğinde `/kod {phone}` yaz.\n"
-        f"Bot sadece 5 haneli Telegram kodunu yakalayacak."
+        f"🔥 **{BOT_NAME}** aktif - En yıkıcı mod.\n\n"
+        f"Kullanım:\n"
+        f"`/cp @targetgrup 999`\n"
+        f"Sonra istediğin kadar medya at.\n"
+        f"`/dur` yazınca spam kesilir.\n\n"
+        f"Developer: @primalamazsin"
     )
 
-@client.on(events.NewMessage(pattern='/kod'))
-async def fetch_code(event):
-    if not event.is_private:
-        await event.respond("❌ Bu komut sadece özelde çalışır.")
+@client.on(events.NewMessage(pattern='/cp'))
+async def start_cp(event):
+    if event.sender_id != OWNER or not event.is_private:
         return
+
+    args = event.message.text.split()
+    if len(args) < 3:
+        await event.respond("❗️ Kullanım: `/cp @targetgrup 999`")
+        return
+
+    target = args[1]
+    try:
+        count = int(args[2])
+    except:
+        count = 999  # Sonsuz loop için büyük sayı
 
     try:
-        phone = event.message.text.split(maxsplit=1)[1].strip()
-    except:
-        await event.respond("❗️ Kullanım: `/kod +905551234567`")
+        chat = await client.get_entity(target)
+    except Exception as e:
+        await event.respond(f"❌ Grup bulunamadı: {e}")
         return
 
-    if event.sender_id not in active_numbers or active_numbers[event.sender_id]["phone"] != phone:
-        await event.respond("❌ Bu numara için aktif işlem yok.")
+    spam_tasks[event.sender_id] = {
+        "target": chat,
+        "media": [],
+        "count": count,
+        "running": True,
+        "delay": 0.6   # Çok hızlı yıkım
+    }
+
+    await event.respond(
+        f"🚀 **Yıkım Modu Aktif**\n"
+        f"Hedef: **{chat.title}**\n"
+        f"Loop: {'Sonsuz' if count > 500 else count}\n\n"
+        f"Şimdi istediğin kadar CP (foto, video, gif) at.\n"
+        f"Bittiğinde `tamam` yaz, spam otomatik başlar."
+    )
+
+@client.on(events.NewMessage())
+async def handle_media(event):
+    if event.sender_id != OWNER or not event.is_private:
+        return
+    if event.sender_id not in spam_tasks:
         return
 
-    inbox_url = active_numbers[event.sender_id]["inbox_url"]
-    wait_msg = await event.respond("🔍 **Kod bekleniyor...**\nTelegram'dan 5 haneli kod gelene kadar sabırla bekliyorum.")
+    data = spam_tasks[event.sender_id]
 
-    for _ in range(48):
-        try:
-            r = requests.get(inbox_url, timeout=10)
-            code_match = re.search(r'Telegram.*?(\d{5})', r.text, re.IGNORECASE | re.DOTALL)
-            if code_match:
-                code = code_match.group(1)
-                await wait_msg.edit(
-                    f"✅ **Telegram Kodu Yakalandı!**\n"
-                    f"Numara: `{phone}`\n"
-                    f"**Kod:** `{code}`\n\n"
-                    f"Telegram'a gir ve yeni hesap aç."
-                )
-                if event.sender_id in active_numbers:
-                    del active_numbers[event.sender_id]
-                return
-        except:
-            pass
-        await asyncio.sleep(5)
+    if event.text and event.text.lower() == "tamam":
+        if not data["media"]:
+            await event.respond("❌ Henüz medya yüklemedin.")
+            return
+        await start_spamming(event.sender_id)
+        return
 
-    await wait_msg.edit("⏳ 5 haneli Telegram kodu yakalanamadı.\nTekrar `/sms` yaz.")
+    if event.text and event.text.lower() == "/dur":
+        await stop_spamming(event.sender_id)
+        return
+
+    # Medya geldi
+    if event.photo or event.video or event.document or event.gif:
+        data["media"].append(event.media)
+        current = len(data["media"])
+        await event.respond(f"✅ Medya alındı ({current} yüklendi)")
+
+        # Eğer istenen sayı kadar yüklendiyse otomatik başlasın
+        if current >= data["count"] and data["count"] < 500:
+            await start_spamming(event.sender_id)
+
+async def start_spamming(user_id):
+    data = spam_tasks[user_id]
+    if not data.get("running"):
+        return
+
+    await client.send_message(user_id, f"💥 **Yıkım başlıyor...**\nHedef: **{data['target'].title}**\n3 saniyede bir değil, **0.6 saniyede bir** atılıyor.")
+
+    task = asyncio.create_task(spam_loop(user_id))
+    spam_tasks[user_id]["task"] = task
+
+async def spam_loop(user_id):
+    data = spam_tasks[user_id]
+    target = data["target"]
+    media_list = data["media"][:data["count"]]
+
+    while data.get("running"):
+        for media in media_list:
+            if not data.get("running"):
+                break
+            try:
+                await client.send_file(target, media, silent=True)
+                await asyncio.sleep(0.6)  # Çok hızlı yıkım
+            except Exception as e:
+                logging.error(f"Yıkım hatası: {e}")
+                await asyncio.sleep(2)
+
+        # Sonsuz loop için tekrar başa dön
+        if data["count"] > 500:
+            await asyncio.sleep(1)  # Kısa mola
+        else:
+            break  # Normal modda bir kere atıp bitsin
+
+    if data.get("running"):
+        await client.send_message(user_id, "✅ **Yıkım tamamlandı (loop bitti).**")
+    if user_id in spam_tasks:
+        del spam_tasks[user_id]
+
+async def stop_spamming(user_id):
+    if user_id in spam_tasks:
+        spam_tasks[user_id]["running"] = False
+        if "task" in spam_tasks[user_id]:
+            spam_tasks[user_id]["task"].cancel()
+        await client.send_message(user_id, "⛔ **Yıkım durduruldu.**")
+        del spam_tasks[user_id]
 
 async def main():
     await client.start(bot_token=BOT_TOKEN)
-    print(f"🚀 {BOT_NAME} çalışıyor... Telegram'da yasaklı olmayan temiz numaraları çeken mod aktif")
+    print(f"🚀 {BOT_NAME} çalışıyor... En yıkıcı CP spam modu aktif (0.6s aralık + loop)")
     await client.run_until_disconnected()
 
 asyncio.run(main())
