@@ -9,7 +9,7 @@ API_HASH = 'ac4afbd122081956a173b16590c02609'
 BOT_TOKEN = '8692735722:AAFJ7u253A9tzqVDNetCzfsEgfzVaOoWwmA'
 
 BOT_NAME = "VATİKAN YIKICI CP"
-OWNER = 8620961678
+OWNER = 8620961678,8729079592
 
 client = TelegramClient('cp_destroyer_fast', API_ID, API_HASH)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
