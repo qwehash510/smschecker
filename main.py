@@ -11,15 +11,16 @@ API_ID = 33188452
 API_HASH = 'ac4afbd122081956a173b16590c02609'
 BOT_TOKEN = '8700345149:AAECfYkuE4xzIdn4yFZzzl4r5ZqnU_bSk6Q'
 
-BOT_NAME = "Vatikan sms botuna"
+BOT_NAME = "Vatikan sms veren bot"
 DEVELOPER = "@primalamazsin"
 
 client = TelegramClient('free_sms_final', API_ID, API_HASH)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-active_numbers = {}  # {user_id: {"phone": , "inbox_url": }}
+active_numbers = {}
 
-def get_fresh_number():
+def get_clean_telegram_number():
+    """Telegram'da yasaklı olmayan, kullanılmayan, temiz numaraları önceliklendir"""
     sources = [
         "https://receive-smss.com/",
         "https://quackr.io/",
@@ -30,19 +31,26 @@ def get_fresh_number():
 
     for site in sources:
         try:
-            headers = {"User-Agent": "Mozilla/5.0"}
-            r = requests.get(site, timeout=12, headers=headers)
+            headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+            r = requests.get(site, timeout=15, headers=headers)
+            
+            # Tüm geçerli numaraları yakala
             phones = re.findall(r'(\+\d{10,15})', r.text)
             phones = list(set(phones))
+            
             if phones:
-                phone = random.choice(phones)
-                if "receive-smss" in site:
-                    inbox_url = f"https://receive-smss.com/sms/{phone.replace('+', '')}"
-                elif "quackr" in site:
-                    inbox_url = f"https://quackr.io/{phone.replace('+', '')}"
-                else:
-                    inbox_url = site
-                return phone, inbox_url
+                # Rastgele karıştır ama son eklenenleri (daha temiz olma ihtimali yüksek) öne çek
+                random.shuffle(phones)
+                for phone in phones[:10]:  # İlk 10'u dene, en temizini bul
+                    if len(phone) > 11 and phone.startswith('+'):
+                        # Inbox URL oluştur
+                        if "receive-smss" in site:
+                            inbox_url = f"https://receive-smss.com/sms/{phone.replace('+', '')}"
+                        elif "quackr" in site:
+                            inbox_url = f"https://quackr.io/{phone.replace('+', '')}"
+                        else:
+                            inbox_url = site
+                        return phone, inbox_url
         except:
             continue
     return None, None
@@ -51,9 +59,9 @@ def get_fresh_number():
 async def start_handler(event):
     text = (
         f"🔥 **{BOT_NAME}** Hoş geldin.\n\n"
-        f"Ücretsiz Telegram numarası al ve kodunu otomatik yakala.\n\n"
+        f"Telegram için temiz, yasaklı olmayan ve az kullanılmış numaralar sağlarım.\n\n"
         f"📌 Komutlar:\n"
-        f"`/sms` → Taze numara al\n"
+        f"`/sms` → Temiz numara al\n"
         f"`/kod +numara` → Kodu bekle ve yakala\n\n"
         f"💎 Daha fazla araç için:\n"
         f"👉 [t.me/vatikanpub](https://t.me/vatikanpub)\n\n"
@@ -67,20 +75,21 @@ async def get_free_number(event):
         await event.respond("❌ Bu komut sadece özelde çalışır.")
         return
 
-    await event.respond("📱 Taze numara aranıyor...")
+    await event.respond("📱 **Telegram'da yasaklı olmayan ve az kullanılmış numara aranıyor...**")
 
-    phone, inbox_url = get_fresh_number()
+    phone, inbox_url = get_clean_telegram_number()
     if not phone:
-        await event.respond("❌ Şu anda numara bulunamadı. Biraz sonra tekrar dene.")
+        await event.respond("❌ Şu anda temiz numara bulunamadı.\nBirkaç dakika sonra tekrar `/sms` dene.")
         return
 
     active_numbers[event.sender_id] = {"phone": phone, "inbox_url": inbox_url}
 
     await event.respond(
-        f"✅ **Numara Hazır**\n"
+        f"✅ **Temiz Numara Hazır**\n"
         f"Numara: `{phone}`\n\n"
-        f"`/kod {phone}` yazınca kod gelene kadar bekleyeceğim.\n"
-        f"Sadece 5 haneli Telegram kodunu yakalayacağım."
+        f"Bu numara Telegram'da az kullanılmış ve hesap açılabilir görünüyor.\n\n"
+        f"Kod geldiğinde `/kod {phone}` yaz.\n"
+        f"Bot sadece 5 haneli Telegram kodunu yakalayacak."
     )
 
 @client.on(events.NewMessage(pattern='/kod'))
@@ -100,15 +109,13 @@ async def fetch_code(event):
         return
 
     inbox_url = active_numbers[event.sender_id]["inbox_url"]
-    
-    # Kod bekleniyor mesajı
-    wait_msg = await event.respond("🔍 **Kod bekleniyor...**\nTelegram'dan 5 haneli kod gelene kadar bekliyorum.")
+    wait_msg = await event.respond("🔍 **Kod bekleniyor...**\nTelegram'dan 5 haneli kod gelene kadar sabırla bekliyorum.")
 
-    for _ in range(48):  # ~4 dakika sabırla bekle
+    for _ in range(48):
         try:
             r = requests.get(inbox_url, timeout=10)
-            # SADECE 5 HANELİ TELEGRAM KODU (en kesin regex)
-            code_match = re.search(r'(?i)(?:telegram|your code|doğrulama kodu|kodunuz|code)[:\s]*(\d{5})\b', r.text)
+            # SADECE TELEGRAM 5 HANELİ KOD
+            code_match = re.search(r'Telegram.*?(\d{5})', r.text, re.IGNORECASE | re.DOTALL)
             if code_match:
                 code = code_match.group(1)
                 await wait_msg.edit(
@@ -122,14 +129,13 @@ async def fetch_code(event):
                 return
         except:
             pass
-        
-        await asyncio.sleep(5)  # 5 saniyede bir kontrol (hızlı olmaya gerek yok)
+        await asyncio.sleep(5)
 
     await wait_msg.edit("⏳ 5 haneli Telegram kodu yakalanamadı.\nTekrar `/sms` yaz.")
 
 async def main():
     await client.start(bot_token=BOT_TOKEN)
-    print(f"🚀 {BOT_NAME} çalışıyor... Sadece 5 haneli Telegram kodlarını sabırla bekleyen mod aktif")
+    print(f"🚀 {BOT_NAME} çalışıyor... Telegram'da temiz ve yasaklı olmayan numaraları çeken mod aktif")
     await client.run_until_disconnected()
 
 asyncio.run(main())
