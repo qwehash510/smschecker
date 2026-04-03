@@ -1,6 +1,7 @@
 import logging
 import asyncio
 from telethon import TelegramClient, events
+from telethon.errors import FloodWaitError
 
 # --- AYARLAR ---
 API_ID = 33188452
@@ -10,21 +11,20 @@ BOT_TOKEN = '8692735722:AAFJ7u253A9tzqVDNetCzfsEgfzVaOoWwmA'
 BOT_NAME = "VATİKAN YIKICI CP"
 OWNER = 8620961678
 
-client = TelegramClient('cp_destroyer', API_ID, API_HASH)
+client = TelegramClient('cp_destroyer_fast', API_ID, API_HASH)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Aktif spam durumu
-spam_tasks = {}  # {user_id: {"target": chat, "media": [], "running": True, "delay": 0.6}}
+spam_tasks = {}  # {user_id: {"target": chat, "media": [], "running": True}}
 
 @client.on(events.NewMessage(pattern='/start'))
 async def start(event):
     await event.respond(
-        f"🔥 **{BOT_NAME}** aktif - En yıkıcı mod.\n\n"
+        f"🔥 **{BOT_NAME}** aktif.\n\n"
         f"Kullanım:\n"
         f"`/cp @targetgrup 999`\n"
         f"Sonra istediğin kadar medya at.\n"
-        f"`/dur` yazınca spam kesilir.\n\n"
-        f"Developer: @primalamazsin"
+        f"`/dur` yazınca durur.\n\n"
+        f"Şu an Flood yemeden en hızlı mod (1.8 saniye aralık)."
     )
 
 @client.on(events.NewMessage(pattern='/cp'))
@@ -41,7 +41,7 @@ async def start_cp(event):
     try:
         count = int(args[2])
     except:
-        count = 999  # Sonsuz loop için büyük sayı
+        count = 999
 
     try:
         chat = await client.get_entity(target)
@@ -53,16 +53,15 @@ async def start_cp(event):
         "target": chat,
         "media": [],
         "count": count,
-        "running": True,
-        "delay": 0.6   # Çok hızlı yıkım
+        "running": True
     }
 
     await event.respond(
         f"🚀 **Yıkım Modu Aktif**\n"
         f"Hedef: **{chat.title}**\n"
         f"Loop: {'Sonsuz' if count > 500 else count}\n\n"
-        f"Şimdi istediğin kadar CP (foto, video, gif) at.\n"
-        f"Bittiğinde `tamam` yaz, spam otomatik başlar."
+        f"Şimdi istediğin kadar CP at.\n"
+        f"Bittiğinde `tamam` yaz."
     )
 
 @client.on(events.NewMessage())
@@ -74,16 +73,17 @@ async def handle_media(event):
 
     data = spam_tasks[event.sender_id]
 
-    if event.text and event.text.lower() == "tamam":
-        if not data["media"]:
-            await event.respond("❌ Henüz medya yüklemedin.")
+    if event.text:
+        text = event.text.lower()
+        if text == "tamam":
+            if not data["media"]:
+                await event.respond("❌ Henüz medya yüklemedin.")
+                return
+            await start_spamming(event.sender_id)
             return
-        await start_spamming(event.sender_id)
-        return
-
-    if event.text and event.text.lower() == "/dur":
-        await stop_spamming(event.sender_id)
-        return
+        elif text == "/dur":
+            await stop_spamming(event.sender_id)
+            return
 
     # Medya geldi
     if event.photo or event.video or event.document or event.gif:
@@ -91,7 +91,6 @@ async def handle_media(event):
         current = len(data["media"])
         await event.respond(f"✅ Medya alındı ({current} yüklendi)")
 
-        # Eğer istenen sayı kadar yüklendiyse otomatik başlasın
         if current >= data["count"] and data["count"] < 500:
             await start_spamming(event.sender_id)
 
@@ -100,7 +99,7 @@ async def start_spamming(user_id):
     if not data.get("running"):
         return
 
-    await client.send_message(user_id, f"💥 **Yıkım başlıyor...**\nHedef: **{data['target'].title}**\n3 saniyede bir değil, **0.6 saniyede bir** atılıyor.")
+    await client.send_message(user_id, f"💥 **Yıkım başlıyor...**\n1.8 saniye aralıkla, Flood koruması maksimum.")
 
     task = asyncio.create_task(spam_loop(user_id))
     spam_tasks[user_id]["task"] = task
@@ -116,19 +115,23 @@ async def spam_loop(user_id):
                 break
             try:
                 await client.send_file(target, media, silent=True)
-                await asyncio.sleep(0.6)  # Çok hızlı yıkım
+                await asyncio.sleep(1.8)   # En optimum hız (Flood yemeden en hızlı)
+            except FloodWaitError as e:
+                wait_time = e.seconds + 3
+                logging.info(f"Flood wait: {wait_time} saniye bekleniyor")
+                await asyncio.sleep(wait_time)
             except Exception as e:
-                logging.error(f"Yıkım hatası: {e}")
-                await asyncio.sleep(2)
+                logging.error(f"CP atma hatası: {e}")
+                await asyncio.sleep(5)
 
         # Sonsuz loop için tekrar başa dön
         if data["count"] > 500:
-            await asyncio.sleep(1)  # Kısa mola
+            await asyncio.sleep(2)  # Kısa mola
         else:
-            break  # Normal modda bir kere atıp bitsin
+            break
 
     if data.get("running"):
-        await client.send_message(user_id, "✅ **Yıkım tamamlandı (loop bitti).**")
+        await client.send_message(user_id, "✅ **Yıkım tamamlandı.**")
     if user_id in spam_tasks:
         del spam_tasks[user_id]
 
@@ -142,7 +145,7 @@ async def stop_spamming(user_id):
 
 async def main():
     await client.start(bot_token=BOT_TOKEN)
-    print(f"🚀 {BOT_NAME} çalışıyor... En yıkıcı CP spam modu aktif (0.6s aralık + loop)")
+    print(f"🚀 {BOT_NAME} çalışıyor... Flood yemeden en hızlı mod (1.8s aralık)")
     await client.run_until_disconnected()
 
 asyncio.run(main())
