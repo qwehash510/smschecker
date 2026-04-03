@@ -12,8 +12,8 @@ API_ID = 33188452
 API_HASH = 'ac4afbd122081956a173b16590c02609'
 BOT_TOKEN = '8700345149:AAECfYkuE4xzIdn4yFZzzl4r5ZqnU_bSk6Q'
 
-BOT_NAME = "VATİKAN ÜCRETSİZ SMS"
-OWNERS = {8620961678}
+BOT_NAME = "Vatikan ücretsiz sms botuna"
+DEVELOPER = "@primalamazsin"
 
 client = TelegramClient('free_sms_pro', API_ID, API_HASH)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -51,25 +51,23 @@ def get_fresh_number():
 
 @client.on(events.NewMessage(pattern='/start', chats=None))
 async def start_handler(event):
-    if event.sender_id not in OWNERS:
-        return
-
     welcome_text = (
         f"🔥 **{BOT_NAME}** Hoş geldin.\n\n"
-        f"Bu bot tamamen ücretsiz ve kuralsız şekilde Telegram için geçici numara sağlar.\n\n"
+        f"Bu bot **tamamen ücretsiz** ve kuralsız şekilde Telegram için geçici numara sağlar.\n\n"
         f"📌 **Nasıl Kullanılır?**\n"
         f"• `/sms` → Taze numara al\n"
         f"• `/kod +numara` → Gelen kodu otomatik yakala\n\n"
-        f"💎 **Vatikan Ekibi** ile daha fazla imkana erişmek istersen:\n"
-        f"👉 [t.me/vatikanpub](https://t.me/vatikanpub) grubumuza gel.\n\n"
-        f"⚡ Bot her `/sms` komutunda farklı ve az kullanılan numaralar çeker.\n\n"
-        f"Developer: @primalamazsin"
+        f"💎 Daha fazla araç ve ekip için:\n"
+        f"👉 [t.me/vatikanpub](https://t.me/vatikanpub) grubumuza katıl.\n\n"
+        f"⚡ Bot her seferinde farklı ve az kullanılan numaralar çeker.\n\n"
+        f"Developer: {DEVELOPER}"
     )
     await event.respond(welcome_text, link_preview=False)
 
 @client.on(events.NewMessage(pattern='/sms', chats=None))
 async def get_free_number(event):
-    if event.sender_id not in OWNERS or not event.is_private:
+    if not event.is_private:
+        await event.respond("❌ Bu komut sadece özel mesajda çalışır.")
         return
 
     await event.respond("📱 **Taze ve az kullanılan numara aranıyor...**")
@@ -106,7 +104,8 @@ async def get_free_number(event):
 
 @client.on(events.NewMessage(pattern='/kod', chats=None))
 async def fetch_code(event):
-    if event.sender_id not in OWNERS or not event.is_private:
+    if not event.is_private:
+        await event.respond("❌ Bu komut sadece özel mesajda çalışır.")
         return
 
     try:
@@ -145,7 +144,7 @@ async def fetch_code(event):
 
 async def main():
     await client.start(bot_token=BOT_TOKEN)
-    print(f"🚀 {BOT_NAME} çalışıyor... En kuralsız ücretsiz SMS modu aktif")
+    print(f"🚀 {BOT_NAME} çalışıyor... Herkese açık ücretsiz SMS modu aktif")
     await client.run_until_disconnected()
 
 asyncio.run(main())
